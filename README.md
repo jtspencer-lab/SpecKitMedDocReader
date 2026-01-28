@@ -68,15 +68,15 @@ Spec File: spec.md
 Checklist: requirements.md  
 Specification Overview  
 The comprehensive specification has been successfully created for the SignUpReader automated document processing system. This is a production-ready design for extracting and analyzing patient/signup information from medical documents with human-review capabilities.
-Key Deliverables
-6 User Stories (Priority-Ordered):
+Key Deliverables  
+### 6 User Stories (Priority-Ordered):
 - P1: Document Upload & Extraction (core functionality)
 - P1: Confidence Scoring & Review Flagging (quality assurance)
 - P1: Human Review Dashboard (human workflow)
 - P2: Batch Processing & Scalability (enterprise operations)
 - P2: REST API for Integration (third-party connectivity)
 - P2: Audit Logging & Compliance (regulatory requirements)   
-16 Functional Requirements covering:
+### 16 Functional Requirements covering:
 - Document ingestion (PDF, JPEG, PNG, TIFF)
 - OCR text extraction
 - Structured data extraction with confidence scoring
@@ -85,14 +85,14 @@ Key Deliverables
 - REST API with auto-generated docs
 - Audit logging and compliance
 - Error handling and containerization  
-10 Measurable Success Criteria: 
+### 10 Measurable Success Criteria: 
 - 95% extraction accuracy on standard medical forms
 - 90% precision in low-confidence flagging
 - 5-minute review cycle time per document
 - 100-document batch processing in under 60 minutes
 - 99.5% system uptime
 - Full HIPAA audit compliance  
-5 Key Entities Defined: 
+### 5 Key Entities Defined: 
 - Document (file metadata and status)
 - ExtractionResult (extracted structured data)
 -  ReviewRecord (human review sessions)
@@ -100,15 +100,15 @@ Key Deliverables
 - Patient (extracted patient information)  
 Quality Assurance
 
-✅ All validation checks passed:
+✅ All validation checks passed:  
 - No implementation details (frameworks, specific APIs)
 - Focused on user value and business needs
 - All requirements are testable and unambiguous
 - Success criteria are measurable and technology-agnostic
 - No [NEEDS CLARIFICATION] markers (no ambiguities)
-- Complete scope definition with clear assumptions and out-of-scope items
-Next Steps
-The specification is ready for planning using /speckit.plan. You can now:
+- Complete scope definition with clear assumptions and out-of-scope items  
+Next Steps  
+The specification is ready for planning using /speckit.plan. You can now:  
 - 1.	Create a detailed technical plan
 - 2.	Define implementation tasks and dependencies
 - 3.	Establish development timeline and resource allocation
