@@ -75,7 +75,7 @@ Key Deliverables
 - P1: Human Review Dashboard (human workflow)
 - P2: Batch Processing & Scalability (enterprise operations)
 - P2: REST API for Integration (third-party connectivity)
-- P2: Audit Logging & Compliance (regulatory requirements)
+- P2: Audit Logging & Compliance (regulatory requirements) 
 16 Functional Requirements covering:
 - Document ingestion (PDF, JPEG, PNG, TIFF)
 - OCR text extraction
@@ -85,14 +85,14 @@ Key Deliverables
 - REST API with auto-generated docs
 - Audit logging and compliance
 - Error handling and containerization
-10 Measurable Success Criteria:
+10 Measurable Success Criteria: 
 - 95% extraction accuracy on standard medical forms
 - 90% precision in low-confidence flagging
 - 5-minute review cycle time per document
 - 100-document batch processing in under 60 minutes
 - 99.5% system uptime
 - Full HIPAA audit compliance
-5 Key Entities Defined:
+5 Key Entities Defined: 
 - Document (file metadata and status)
 - ExtractionResult (extracted structured data)
 -  ReviewRecord (human review sessions)
