@@ -106,8 +106,8 @@ Quality Assurance
 - All requirements are testable and unambiguous
 - Success criteria are measurable and technology-agnostic
 - No [NEEDS CLARIFICATION] markers (no ambiguities)
-- Complete scope definition with clear assumptions and out-of-scope items  
-Next Steps  
+- Complete scope definition with clear assumptions and out-of-scope items    
+### Next Steps  
 The specification is ready for planning using /speckit.plan. You can now:  
 - 1.	Create a detailed technical plan
 - 2.	Define implementation tasks and dependencies
