@@ -1,5 +1,5 @@
 # SpecKitMedDocReader
-# Exploration of coding with Spec_kit
+# Exploration of coding with Spec_kit and Visual Studio
 
 ## This is an exploration of using Spec-Kit to rebuild my MedDocReader 
 I started by installing Spec-Kit through Visual Code terminal by running these commands
