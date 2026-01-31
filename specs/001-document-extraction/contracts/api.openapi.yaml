@@ -1,0 +1,952 @@
+openapi: 3.0.3
+info:
+  title: SignUpReader Document Processing API
+  description: |
+    Automated document processing system for extracting and analyzing patient/signup information
+    from medical documents with human-review capabilities.
+    
+    All endpoints require valid API credentials (Bearer token in Authorization header).
+    Responses include standard error codes and detailed error messages.
+  version: 1.0.0
+  contact:
+    name: SignUpReader Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local development
+  - url: https://api.example.com/api
+    description: Production
+
+paths:
+  /v1/health:
+    get:
+      summary: System Health Check
+      description: Returns system status and readiness
+      operationId: getHealth
+      tags:
+        - System
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: System degraded or unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/documents:
+    post:
+      summary: Upload a Document
+      description: |
+        Upload a single medical document for processing. Supports PDF, JPEG, PNG, TIFF formats.
+        File size must be 100KB - 50MB.
+        
+        The document is immediately queued for processing. Use the returned document_id
+        to poll for status and retrieve results.
+      operationId: uploadDocument
+      tags:
+        - Documents
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file to upload
+                metadata:
+                  type: object
+                  description: Optional metadata (JSON string)
+                  properties:
+                    patient_id:
+                      type: string
+                      description: Optional external patient ID for linking
+                    batch_id:
+                      type: string
+                      description: Batch ID if part of batch upload
+              required:
+                - file
+      responses:
+        '201':
+          description: Document uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUploadResponse'
+        '400':
+          description: Invalid request (bad file format, size, etc)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: File too large (>50MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid API credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: List Documents
+      description: |
+        Retrieve a paginated list of documents uploaded by the authenticated user.
+        Supports filtering by status, date range, and search query.
+      operationId: listDocuments
+      tags:
+        - Documents
+      parameters:
+        - name: status
+          in: query
+          description: Filter by processing status
+          schema:
+            type: string
+            enum: [pending, processing, completed, failed]
+        - name: skip
+          in: query
+          description: Number of documents to skip (pagination)
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum documents to return
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: sort_by
+          in: query
+          description: Sort field
+          schema:
+            type: string
+            enum: [upload_date, filename, status]
+            default: upload_date
+        - name: sort_order
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/documents/{document_id}:
+    get:
+      summary: Get Document Details
+      description: Retrieve details for a specific document
+      operationId: getDocument
+      tags:
+        - Documents
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          description: UUID of the document
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/documents/{document_id}/status:
+    get:
+      summary: Check Document Processing Status
+      description: |
+        Poll for document processing status. Returns current state and estimated time remaining.
+        
+        Status values:
+        - `pending`: Document queued, waiting to be processed
+        - `processing`: Currently extracting data
+        - `completed`: Extraction finished, results ready
+        - `failed`: Processing error occurred
+      operationId: getDocumentStatus
+      tags:
+        - Documents
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          description: UUID of the document
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current processing status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentStatus'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/documents/{document_id}/results:
+    get:
+      summary: Get Extraction Results
+      description: |
+        Retrieve extracted data for a completed document.
+        
+        Only available after processing_status is "completed".
+        Returns structured extracted fields with confidence scores.
+        Fields with confidence < 0.8 are flagged for human review.
+      operationId: getExtractionResults
+      tags:
+        - Documents
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          description: UUID of the document
+          schema:
+            type: string
+            format: uuid
+        - name: include_raw_response
+          in: query
+          description: Include raw Azure Form Recognizer response for debugging
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Extracted data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionResultResponse'
+        '202':
+          description: Processing still in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentStatus'
+        '404':
+          description: Document or results not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Processing failed - see error details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/batch/upload:
+    post:
+      summary: Upload Batch of Documents
+      description: |
+        Upload multiple documents at once for batch processing.
+        
+        Returns immediately with batch_id. Use /v1/batch/{batch_id}/status
+        to monitor overall progress.
+      operationId: uploadBatch
+      tags:
+        - Batch Processing
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Multiple document files
+                batch_name:
+                  type: string
+                  description: Optional name for this batch
+              required:
+                - files
+      responses:
+        '201':
+          description: Batch accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchUploadResponse'
+        '400':
+          description: Invalid request or files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/batch/{batch_id}/status:
+    get:
+      summary: Get Batch Processing Status
+      description: |
+        Monitor progress of batch document processing.
+        Returns counts: total, completed, failed, pending.
+      operationId: getBatchStatus
+      tags:
+        - Batch Processing
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          description: UUID of the batch
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Batch status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchStatusResponse'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/reviews:
+    get:
+      summary: List Documents Pending Review
+      description: |
+        Retrieve documents flagged for human review.
+        Sorted by confidence score (lowest first) to prioritize risky extractions.
+      operationId: listReviewQueue
+      tags:
+        - Reviews
+      parameters:
+        - name: reviewer_id
+          in: query
+          description: Filter by reviewer (optional)
+          schema:
+            type: string
+            format: uuid
+        - name: skip
+          in: query
+          description: Pagination offset
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum results
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of documents needing review
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewQueueResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/reviews/{review_id}:
+    get:
+      summary: Get Review Details
+      description: Retrieve extraction results and review history for a document
+      operationId: getReviewDetails
+      tags:
+        - Reviews
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          description: UUID of the review record
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Review details with extraction data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDetailsResponse'
+        '404':
+          description: Review record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update Review with Corrections
+      description: |
+        Submit corrections to extraction fields.
+        Automatically creates ReviewRecord tracking changes.
+      operationId: updateReview
+      tags:
+        - Reviews
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          description: UUID of the review record
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewUpdateRequest'
+      responses:
+        '200':
+          description: Review updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDetailsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Review not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/reviews/{review_id}/approve:
+    post:
+      summary: Approve Extraction Results
+      description: |
+        Approve extraction results, marking the document as ready for data entry.
+        All flagged fields must be reviewed before approval.
+      operationId: approveReview
+      tags:
+        - Reviews
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          description: UUID of the review record
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+                  description: Optional reviewer comments
+      responses:
+        '200':
+          description: Document approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDetailsResponse'
+        '400':
+          description: Cannot approve (flagged fields remain)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/reviews/{review_id}/reject:
+    post:
+      summary: Reject Extraction Results
+      description: |
+        Reject extraction results and requeue document for reprocessing.
+      operationId: rejectReview
+      tags:
+        - Reviews
+      parameters:
+        - name: review_id
+          in: path
+          required: true
+          description: UUID of the review record
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for rejection
+              required:
+                - reason
+      responses:
+        '200':
+          description: Document rejected and requeued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Review not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/audit-logs:
+    get:
+      summary: Query Audit Logs
+      description: |
+        Retrieve audit logs for compliance reporting.
+        Requires admin role.
+      operationId: getAuditLogs
+      tags:
+        - Compliance
+      parameters:
+        - name: start_date
+          in: query
+          description: Start of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          description: End of date range (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: user_id
+          in: query
+          description: Filter by user
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          description: Filter by action type
+          schema:
+            type: string
+        - name: skip
+          in: query
+          description: Pagination offset
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          description: Maximum results
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        services:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+            task_queue:
+              type: string
+              enum: [ok, error]
+            azure_api:
+              type: string
+              enum: [ok, error]
+
+    Error:
+      type: object
+      properties:
+        error_code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
+
+    DocumentUploadResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Document ID for tracking
+        filename:
+          type: string
+        file_size:
+          type: integer
+        processing_status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        upload_date:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        file_size:
+          type: integer
+        format:
+          type: string
+        upload_date:
+          type: string
+          format: date-time
+        processing_status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        processing_started_at:
+          type: string
+          format: date-time
+        processing_completed_at:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+
+    DocumentStatus:
+      type: object
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        progress_percent:
+          type: integer
+          description: 0-100, only for processing status
+        estimated_time_seconds:
+          type: integer
+          description: Estimated seconds until completion
+        error_message:
+          type: string
+
+    DocumentListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total documents matching filter
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentResponse'
+        skip:
+          type: integer
+        limit:
+          type: integer
+
+    ExtractionFieldData:
+      type: object
+      properties:
+        field_name:
+          type: string
+          example: patient_name
+        field_value:
+          type: string
+        confidence:
+          type: number
+          format: float
+          description: 0.0-1.0 confidence score
+        flagged_for_review:
+          type: boolean
+          description: True if confidence < 0.8
+        source:
+          type: string
+          enum: [azure_form_recognizer, spacy_nlp, pattern, manual]
+
+    ExtractionResultResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        extraction_date:
+          type: string
+          format: date-time
+        overall_confidence:
+          type: number
+          format: float
+          description: Average confidence across all fields
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtractionFieldData'
+        flagged_count:
+          type: integer
+          description: Number of fields flagged for review
+        processing_time_ms:
+          type: integer
+
+    BatchUploadResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        batch_name:
+          type: string
+        documents_accepted:
+          type: integer
+        documents_rejected:
+          type: integer
+        rejection_details:
+          type: array
+          items:
+            type: object
+
+    BatchStatusResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        total_documents:
+          type: integer
+        completed:
+          type: integer
+        processing:
+          type: integer
+        pending:
+          type: integer
+        failed:
+          type: integer
+        overall_progress_percent:
+          type: integer
+        estimated_completion:
+          type: string
+          format: date-time
+
+    ReviewQueueItem:
+      type: object
+      properties:
+        review_id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        overall_confidence:
+          type: number
+          format: float
+        flagged_fields_count:
+          type: integer
+        queued_date:
+          type: string
+          format: date-time
+
+    ReviewQueueResponse:
+      type: object
+      properties:
+        total_pending:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewQueueItem'
+
+    ReviewChange:
+      type: object
+      properties:
+        field_name:
+          type: string
+        old_value:
+          type: string
+        new_value:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ReviewDetailsResponse:
+      type: object
+      properties:
+        review_id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        extraction_results:
+          $ref: '#/components/schemas/ExtractionResultResponse'
+        review_status:
+          type: string
+          enum: [pending, in_progress, completed]
+        approval_status:
+          type: string
+          enum: [approved, rejected]
+        reviewer_id:
+          type: string
+          format: uuid
+        review_date:
+          type: string
+          format: date-time
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewChange'
+        comments:
+          type: string
+
+    ReviewUpdateRequest:
+      type: object
+      properties:
+        field_corrections:
+          type: array
+          items:
+            type: object
+            properties:
+              field_name:
+                type: string
+              new_value:
+                type: string
+        comments:
+          type: string
+      required:
+        - field_corrections
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        change_data:
+          type: object
+        status:
+          type: string
+          enum: [success, failure]
+
+    AuditLogListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token authentication
+
+security:
+  - bearerAuth: []
